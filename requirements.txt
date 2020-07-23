@@ -1,0 +1,2 @@
+scikit-learn==0.21.1
+word2number==1.1
