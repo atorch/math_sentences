@@ -12,8 +12,7 @@ python fit_model.py
 ```
 
 ```bash
-Input sentence 'Did you know that three plus four =', correct result 7, prediction 7.732294082641602
-Input sentence 'What do you think seven added to five is', correct result 12, prediction 12.400672912597656
-Input sentence 'two plus one equals', correct result 3, prediction 1.5675246715545654
+Input sentence 'I think ten added to two is', correct result 12, prediction 13.812738418579102
+Input sentence 'twenty-one plus ten =', correct result 31, prediction 33.2834358215332
+Input sentence 'nineteen plus three equals', correct result 22, prediction 25.56694793701172
 ```
-

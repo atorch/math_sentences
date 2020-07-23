@@ -1,4 +1,8 @@
+import inflect
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras import losses, optimizers
+from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     BatchNormalization,
@@ -8,30 +12,20 @@ from tensorflow.keras.layers import (
     Input,
     LSTM,
 )
-import numpy as np
-from sklearn.preprocessing import LabelEncoder
-from tensorflow.keras.utils import to_categorical
 from word2number import w2n
 
 
-openings = ["", "Did you know that ", "I think ", "What do you think "]
-numbers = [
-    "zero",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-]
-equalities = ["equals", "is", "="]
-operations = ["plus", "+", "added to"]
+INFLECT_ENGINE = inflect.engine()
+
+# Note: this list contains "zero", "one", "two", "three", etc
+NUMBERS = [INFLECT_ENGINE.number_to_words(x) for x in range(25)]
+
+OPENINGS = ["", "Did you know that ", "I think ", "What do you think "]
+EQUALITIES = ["equals", "is", "="]
+OPERATIONS = ["plus", "+", "added to"]
 
 CHARACTERS = list(
-    set([c for c in "".join(openings + numbers + operations + equalities)])
+    set([c for c in "".join(OPENINGS + NUMBERS + OPERATIONS + EQUALITIES)])
 )
 
 
@@ -39,12 +33,12 @@ def simulate_sentence():
 
     # TODO Possiblity of adding three numbers?
     # Note: w2n requires str inputs (not numpy strings)
-    number1 = str(np.random.choice(numbers))
-    number2 = str(np.random.choice(numbers))
+    number1 = str(np.random.choice(NUMBERS))
+    number2 = str(np.random.choice(NUMBERS))
 
-    equals = np.random.choice(equalities)
-    opening = np.random.choice(openings)
-    operation = np.random.choice(operations)
+    equals = np.random.choice(EQUALITIES)
+    opening = np.random.choice(OPENINGS)
+    operation = np.random.choice(OPERATIONS)
 
     # Note: the opening is independent of the result,
     #  so the model should learn to ignore it
