@@ -4,27 +4,48 @@ import inflect
 INFLECT_ENGINE = inflect.engine()
 
 # Note: this list contains "zero", "one", "two", "three", etc
-NUMBERS = [INFLECT_ENGINE.number_to_words(x) for x in range(40)]
+NUMBERS = [INFLECT_ENGINE.number_to_words(x) for x in range(50)]
 
 OPENINGS = [
     "",
+    "And what is ",
     "Clearly ",
     "Did you know that ",
+    "Eighteen is a number, but ignore it. What's ",
     "Hey ",
     "Hey?! ",
     "I need to know ",
     "I think ",
+    "Ignore the number nine. What's ",
+    "Ignore this text. Answer this: ",
+    "My question is: what's ",
+    "Now, what is ",
+    "One question I have is: ",
+    "One thing I thought of is ",
+    "One two three are numbers. What is ",
+    "Question three: ",
+    "Question: ",
+    "Seventeen is a number. What is ",
+    "So what is ",
     "So, clearly ",
     "So... ",
-    "Um, barf ",
+    "So: what is ",
+    "Therefore ",
+    "Um, barf! I hate math... ",
     "Well, tell me, ",
     "What do you think ",
+    "What is ",
     "What's ",
     "You're saying that ",
+    "You've seen that ",
 ]
+
+# TODO Several of these sentences don't make sense, e.g. "What is one + one equals"
 EQUALITIES = ["equals", "is", "="]
-OPERATIONS = ["plus", "+", "added to", "and"]
+
+OPERATIONS_PLUS = ["plus", "+", "added to", "and"]
+OPERATIONS_MINUS = ["minus", "-"]
 
 CHARACTERS = list(
-    set([c for c in "".join(OPENINGS + NUMBERS + OPERATIONS + EQUALITIES)])
+    set([c for c in "".join(OPENINGS + NUMBERS + OPERATIONS_MINUS + OPERATIONS_PLUS + EQUALITIES)])
 )
