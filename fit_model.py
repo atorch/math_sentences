@@ -51,6 +51,9 @@ def simulate_sentence():
 
     # TODO Different distribution for train and validation generators, so that we
     #  can see how the model does on unseen sentences similar to those in the training set
+
+    # TODO Could fit a multi-objective model that tries to predict the result _and_
+    #  something else, e.g. the second number in the operation
     return sentence, result
 
 
@@ -63,6 +66,23 @@ def get_characters_one_hot_encoded(sentence, character_label_encoder):
 
     # TODO Could use an embedding layer at the beginning of the model instead of doing this
     return to_categorical(characters_encoded, num_classes=n_character_classes)
+
+
+def force_sentence_to_n_chars(sentence, n_characters_in_sentence):
+
+    if len(sentence) > n_characters_in_sentence:
+
+        # Note: we use the _end_ of the sentence, which is the part that contains math
+        #  (as opposed to the sentence opening, which might contain non-math words)
+        sentence = sentence[-n_characters_in_sentence:]
+
+    elif len(sentence) < n_characters_in_sentence:
+        n_characters_missing = n_characters_in_sentence - len(sentence)
+        # TODO Would it help to add random characters instead of whitespace?
+        whitespace = "".join([" "] * n_characters_missing)
+        sentence = f"{whitespace}{sentence}"
+
+    return sentence
 
 
 def get_generator(character_label_encoder, batch_size=20):
@@ -83,17 +103,7 @@ def get_generator(character_label_encoder, batch_size=20):
 
             sentence, result = simulate_sentence()
 
-            # TODO Hack to force sentence to be of length n_characters_in_sentence
-            if len(sentence) > n_characters_in_sentence:
-
-                # Note: we use the _end_ of the sentence, which is the part that contains math
-                #  (as opposed to the sentence opening, which might contain non-math words)
-                sentence = sentence[-n_characters_in_sentence:]
-
-            elif len(sentence) < n_characters_in_sentence:
-                n_characters_missing = n_characters_in_sentence - len(sentence)
-                whitespace = "".join([" "] * n_characters_missing)
-                sentence = f"{whitespace}{sentence}"
+            sentence = force_sentence_to_n_chars(sentence, n_characters_in_sentence)
 
             characters_one_hot = get_characters_one_hot_encoded(
                 sentence, character_label_encoder
@@ -138,13 +148,13 @@ def print_prediction(model, character_label_encoder, sentence, result):
     )
     characters_one_hot = np.expand_dims(characters_one_hot, axis=0)
 
-    prediction = model.predict(tf.convert_to_tensor(characters_one_hot))[0][0]
+    prediction = np.round(model.predict(tf.convert_to_tensor(characters_one_hot))[0][0], 2)
     print(
         f"Input sentence '{sentence}', correct result {result}, prediction {prediction}"
     )
 
 
-def main(epochs=200):
+def main(epochs=500):
 
     character_label_encoder = LabelEncoder().fit(CHARACTERS)
 
@@ -156,14 +166,14 @@ def main(epochs=200):
         x=training_generator, steps_per_epoch=100, epochs=epochs, verbose=True,
     )
 
-    # Let's see how the model does on sentences that it may have seen during training
-    for idx in range(3):
+    # First, let's see how the model does on sentences that it may have seen during training
+    for idx in range(5):
 
         sentence, result = simulate_sentence()
         print_prediction(model, character_label_encoder, sentence, result)
 
-    # Start with a version of "one + one" that is part of the training set, and then
-    #  gradually modify it so that we are extrapolating and predicting on an unseen sentence
+    # Next, let's start with a version of "one + one" that is part of the training set, and
+    #  gradually modify it so that we are extrapolating (i.e. predicting on an unseen sentence)
     result = 2
     for sentence in [
         "What is one + one =",
