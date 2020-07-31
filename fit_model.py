@@ -144,7 +144,7 @@ def print_prediction(model, character_label_encoder, sentence, result):
     )
 
 
-def main(epochs=150):
+def main(epochs=200):
 
     character_label_encoder = LabelEncoder().fit(CHARACTERS)
 
@@ -166,11 +166,11 @@ def main(epochs=150):
     #  gradually modify it so that we are extrapolating and predicting on an unseen sentence
     result = 2
     for sentence in [
-        "What is one + one",
-        "Can you answer one + one",
-        "Never seen before: what is one + one",
+        "What is one + one =",
+        "Can you answer one + one =",
+        "Never seen before: what is one + one =",
         "What is one + one?",
-        "Sentence you've never seen before: what is one + one",
+        "Sentence you've never seen before: what is one + one??",
     ]:
         print_prediction(model, character_label_encoder, sentence, result)
 

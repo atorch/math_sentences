@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.1.0-py3
+FROM tensorflow/tensorflow:2.3.0-gpu
 
 WORKDIR /home/math_sentences
 

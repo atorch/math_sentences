@@ -40,8 +40,7 @@ OPENINGS = [
     "You've seen that ",
 ]
 
-# TODO Several of these sentences don't make sense, e.g. "What is one + one equals"
-EQUALITIES = ["equals", "is", "="]
+EQUALITIES = ["="]
 
 OPERATIONS_PLUS = ["plus", "+", "added to", "and"]
 OPERATIONS_MINUS = ["minus", "-"]
