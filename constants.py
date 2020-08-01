@@ -6,9 +6,10 @@ INFLECT_ENGINE = inflect.engine()
 # Note: this list contains "zero", "one", "two", "three", etc
 NUMBERS = [INFLECT_ENGINE.number_to_words(x) for x in range(50)]
 
-OPENINGS = [
+OPENINGS_TRAINING = [
     "",
     "And what is ",
+    "Because seven eight nine. ",
     "Clearly ",
     "Did you know that ",
     "Eighteen is a number, but ignore it. What's ",
@@ -40,6 +41,19 @@ OPENINGS = [
     "What's ",
     "You're saying that ",
     "You've seen that ",
+    "Zero eight something twelve... ",
+]
+
+OPENINGS_VALIDATION = [
+    "Because ten eleven twelve :-) ",
+    "Beep boop beep boop, I am a robot. ",
+    "Five nine zero pandas. ",
+    "One and three are numbers, but ignore them. ",
+    "So, what is ",
+    "The quick brown fox jumps over the lazy dog... ",
+    "Validation question: what is ",
+    "Why is six afraid of seven ? ",
+    "You've never seen this string. Can you ignore it? ",
 ]
 
 EQUALITIES = ["="]
@@ -48,5 +62,8 @@ OPERATIONS_PLUS = ["plus", "+", "added to", "and"]
 OPERATIONS_MINUS = ["minus", "-"]
 
 CHARACTERS = list(
-    set([c for c in "".join(OPENINGS + NUMBERS + OPERATIONS_MINUS + OPERATIONS_PLUS + EQUALITIES)])
+    set([c for c in "".join(OPENINGS_VALIDATION + OPENINGS_TRAINING + NUMBERS + OPERATIONS_MINUS + OPERATIONS_PLUS + EQUALITIES)])
 )
+
+OUTPUT_RESULT = "result"
+OUTPUT_FIRST_NUMBER = "first_num"

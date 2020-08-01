@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import tensorflow as tf
-from tensorflow.keras import losses, optimizers
+from tensorflow.keras import callbacks, losses, optimizers
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
@@ -14,37 +14,42 @@ from tensorflow.keras.layers import (
 )
 from word2number import w2n
 
-
 from constants import (
     CHARACTERS,
     EQUALITIES,
     NUMBERS,
-    OPENINGS,
+    OPENINGS_TRAINING,
+    OPENINGS_VALIDATION,
     OPERATIONS_MINUS,
     OPERATIONS_PLUS,
+    OUTPUT_RESULT,
+    OUTPUT_FIRST_NUMBER,
 )
 
 
-def simulate_sentence():
+def simulate_sentence(openings):
 
     # Note: w2n requires str inputs (not numpy strings)
-    number1 = str(np.random.choice(NUMBERS))
-    number2 = str(np.random.choice(NUMBERS))
+    number1_as_str = str(np.random.choice(NUMBERS))
+    number2_as_str = str(np.random.choice(NUMBERS))
+
+    number1_as_float = w2n.word_to_num(number1_as_str)
+    number2_as_float = w2n.word_to_num(number2_as_str)
 
     equals = np.random.choice(EQUALITIES)
-    opening = np.random.choice(OPENINGS)
+    opening = np.random.choice(openings)
 
     if np.random.uniform() < 0.50:
         operation = np.random.choice(OPERATIONS_PLUS)
-        result = w2n.word_to_num(number1) + w2n.word_to_num(number2)
+        result = number1_as_float + number2_as_float
 
     else:
         operation = np.random.choice(OPERATIONS_MINUS)
-        result = w2n.word_to_num(number1) - w2n.word_to_num(number2)
+        result = number1_as_float - number2_as_float
 
     # Note: the opening is independent of the result,
     #  so the model should learn to ignore it
-    sentence = f"{opening}{number1} {operation} {number2} {equals}"
+    sentence = f"{opening}{number1_as_str} {operation} {number2_as_str} {equals}"
 
     # Note: this function can only return a finite number of possible sentences.
     #  Eventually, the model will see all of them...
@@ -54,7 +59,7 @@ def simulate_sentence():
 
     # TODO Could fit a multi-objective model that tries to predict the result _and_
     #  something else, e.g. the second number in the operation
-    return sentence, result
+    return sentence, result, number1_as_float
 
 
 def get_characters_one_hot_encoded(sentence, character_label_encoder):
@@ -85,7 +90,7 @@ def force_sentence_to_n_chars(sentence, n_characters_in_sentence):
     return sentence
 
 
-def get_generator(character_label_encoder, batch_size=20):
+def get_generator(character_label_encoder, openings, batch_size=20):
 
     n_character_classes = len(character_label_encoder.classes_)
 
@@ -97,11 +102,13 @@ def get_generator(character_label_encoder, batch_size=20):
         batch_X_shape = (batch_size, n_characters_in_sentence, n_character_classes)
         batch_X = np.zeros(batch_X_shape)
 
-        batch_Y = np.zeros((batch_size,))
+        # Note: the model has multiple objectives/outputs
+        batch_result = np.zeros((batch_size,))
+        batch_first_number = np.zeros((batch_size,))
 
         for idx in range(batch_size):
 
-            sentence, result = simulate_sentence()
+            sentence, result, first_number = simulate_sentence(openings)
 
             sentence = force_sentence_to_n_chars(sentence, n_characters_in_sentence)
 
@@ -110,25 +117,30 @@ def get_generator(character_label_encoder, batch_size=20):
             )
 
             batch_X[idx] = characters_one_hot
-            batch_Y[idx] = result
+            batch_result[idx] = result
+            batch_first_number[idx] = first_number
+
+        targets = {OUTPUT_FIRST_NUMBER: batch_first_number, OUTPUT_RESULT: batch_result}
 
         # Note: the generator returns tuples of (inputs, targets)
-        yield (batch_X, batch_Y)
+        yield (batch_X, targets)
 
 
-def get_model(character_label_encoder, dropout=0.1):
+def get_model(character_label_encoder, dropout=0.05, n_units=64):
 
     n_character_classes = len(character_label_encoder.classes_)
 
     # Note: input shape None-by-n_character_classes allows for arbitrary length sentences
     input_layer = Input(shape=(None, n_character_classes))
 
-    gru1 = GRU(units=32, return_sequences=True, dropout=dropout,)(input_layer)
+    gru1 = GRU(units=n_units, return_sequences=True, dropout=dropout,)(input_layer)
+    gru2 = GRU(units=n_units, return_sequences=True, dropout=dropout,)(gru1)
 
-    # Note: activation=None means linear activation
-    gru2 = GRU(units=1, activation=None,)(gru1)
+    # Note: activation=None means linear activation (used for regression output)
+    gru_result = GRU(units=1, activation=None, name=OUTPUT_RESULT)(gru2)
+    gru_first_number = GRU(units=1, activation=None, name=OUTPUT_FIRST_NUMBER)(gru2)
 
-    model = Model(inputs=input_layer, outputs=gru2)
+    model = Model(inputs=input_layer, outputs=[gru_result, gru_first_number])
 
     nadam = optimizers.Nadam()
 
@@ -141,35 +153,61 @@ def get_model(character_label_encoder, dropout=0.1):
     return model
 
 
+def get_output_names(model):
+
+    # Note: example name is TODO -- get the part before the "/"
+    return [x.op.name.split("/")[0] for x in model.outputs]
+
+
 def print_prediction(model, character_label_encoder, sentence, result):
+
+    output_names = get_output_names(model)
+    result_index = np.where([o.startswith(OUTPUT_RESULT) for o in output_names])[0][0]
 
     characters_one_hot = get_characters_one_hot_encoded(
         sentence, character_label_encoder
     )
     characters_one_hot = np.expand_dims(characters_one_hot, axis=0)
 
-    prediction = np.round(model.predict(tf.convert_to_tensor(characters_one_hot))[0][0], 2)
+    prediction = model.predict(tf.convert_to_tensor(characters_one_hot))[result_index][
+        0
+    ][0]
     print(
-        f"Input sentence '{sentence}', correct result {result}, prediction {prediction}"
+        f"Input sentence '{sentence}', correct result {result}, prediction {prediction:.2f}"
     )
 
 
-def main(epochs=500):
+def main(max_epochs=500):
 
     character_label_encoder = LabelEncoder().fit(CHARACTERS)
 
-    training_generator = get_generator(character_label_encoder)
+    training_generator = get_generator(
+        character_label_encoder, openings=OPENINGS_TRAINING
+    )
+    validation_generator = get_generator(
+        character_label_encoder, openings=OPENINGS_VALIDATION
+    )
 
     model = get_model(character_label_encoder)
 
     history = model.fit(
-        x=training_generator, steps_per_epoch=100, epochs=epochs, verbose=True,
+        x=training_generator,
+        steps_per_epoch=100,
+        epochs=max_epochs,
+        verbose=True,
+        callbacks=[
+            callbacks.EarlyStopping(
+                patience=20, monitor="val_loss", restore_best_weights=True, verbose=True
+            )
+        ],
+        validation_data=validation_generator,
+        validation_steps=50,
     )
 
     # First, let's see how the model does on sentences that it may have seen during training
     for idx in range(5):
 
-        sentence, result = simulate_sentence()
+        sentence, result, number1 = simulate_sentence(openings=OPENINGS_TRAINING)
         print_prediction(model, character_label_encoder, sentence, result)
 
     # Next, let's start with a version of "one + one" that is part of the training set, and
@@ -192,7 +230,10 @@ def main(epochs=500):
 
     # See the sentence construction logic in simulate_sentence
     n_possible_sentences = (
-        len(OPENINGS) * (len(NUMBERS) ** 2) * len(OPERATIONS_MINUS + OPERATIONS_PLUS) * len(EQUALITIES)
+        len(OPENINGS_TRAINING)
+        * (len(NUMBERS) ** 2)
+        * len(OPERATIONS_MINUS + OPERATIONS_PLUS)
+        * len(EQUALITIES)
     )
 
     print(
