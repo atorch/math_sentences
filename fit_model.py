@@ -6,11 +6,12 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     BatchNormalization,
-    Conv1D,
     Dropout,
-    GRU,
     Input,
-    LSTM,
+    MultiHeadAttention,
+    LayerNormalization,
+    Dense,
+    Add,
 )
 from word2number import w2n
 
@@ -25,6 +26,52 @@ from constants import (
     OUTPUT_RESULT,
     OUTPUT_FIRST_NUMBER,
 )
+
+
+# Transformer block
+def transformer_block(inputs, head_size, num_heads, ff_dim, dropout=0):
+    x = MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(inputs, inputs)
+    x = Dropout(dropout)(x)
+    x = LayerNormalization(epsilon=1e-6)(x)
+    res = Add()([inputs, x])
+    
+    x = Dense(ff_dim, activation="relu")(res)
+    x = Dropout(dropout)(x)
+    x = Dense(inputs.shape[-1])(x)
+    x = Add()([res, x])
+    return LayerNormalization(epsilon=1e-6)(x)
+
+
+def get_model(character_label_encoder, head_size=256, num_heads=4, ff_dim=256, dropout=0.1, num_transformer_blocks=4):
+
+    n_character_classes = len(character_label_encoder.classes_)
+
+    input_layer = Input(shape=(None, n_character_classes))
+
+    x = input_layer
+    for _ in range(num_transformer_blocks):
+        x = transformer_block(x, head_size, num_heads, ff_dim, dropout)
+
+    x = LayerNormalization(epsilon=1e-6)(x)
+    x = Dense(n_character_classes)(x)
+
+    # Output layers for regression tasks
+    output_result = Dense(1, activation=None, name=OUTPUT_RESULT)(x)
+    output_first_number = Dense(1, activation=None, name=OUTPUT_FIRST_NUMBER)(x)
+
+    model = Model(inputs=input_layer, outputs=[output_result, output_first_number])
+
+    nadam = optimizers.Nadam()
+
+    model.compile(
+        optimizer=nadam, loss=losses.mean_squared_error, metrics=["mean_squared_error"],
+    )
+
+    print(model.summary())
+
+    return model
+
+# The rest of the code remains unchanged (simulate_sentence, get_characters_one_hot_encoded, force_sentence_to_n_chars, get_generator, get_output_names, print_prediction, main)
 
 
 def simulate_sentence(openings):
@@ -124,33 +171,6 @@ def get_generator(character_label_encoder, openings, batch_size=20):
 
         # Note: the generator returns tuples of (inputs, targets)
         yield (batch_X, targets)
-
-
-def get_model(character_label_encoder, dropout=0.05, n_units=64):
-
-    n_character_classes = len(character_label_encoder.classes_)
-
-    # Note: input shape None-by-n_character_classes allows for arbitrary length sentences
-    input_layer = Input(shape=(None, n_character_classes))
-
-    gru1 = GRU(units=n_units, return_sequences=True, dropout=dropout,)(input_layer)
-    gru2 = GRU(units=n_units, return_sequences=True, dropout=dropout,)(gru1)
-
-    # Note: activation=None means linear activation (used for regression output)
-    gru_result = GRU(units=1, activation=None, name=OUTPUT_RESULT)(gru2)
-    gru_first_number = GRU(units=1, activation=None, name=OUTPUT_FIRST_NUMBER)(gru2)
-
-    model = Model(inputs=input_layer, outputs=[gru_result, gru_first_number])
-
-    nadam = optimizers.Nadam()
-
-    model.compile(
-        optimizer=nadam, loss=losses.mean_squared_error, metrics=["mean_squared_error"],
-    )
-
-    print(model.summary())
-
-    return model
 
 
 def get_output_names(model):
