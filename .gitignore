@@ -1,2 +1,5 @@
 *~
 __pycache__/*
+
+# Saved models (can be large)
+saved_models/
