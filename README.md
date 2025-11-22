@@ -111,37 +111,49 @@ The phrase "the model memorizes the training distribution but doesn't truly unde
 Running systematic evaluation on a trained model revealed a clear distinction:
 
 **Type (a) - Distractor text generalization: ✅ WORKS**
-- Baseline error (in-distribution): 2.19 ± 2.24
-- Novel similar distractors: 1.93 ± 2.03 (comparable to baseline, no significant degradation)
-- Very different distractors: 4.87 ± 3.75 (only ~2x worse, despite unusual text)
+- Baseline error (in-distribution): 1.85 ± 2.06
+- Novel similar distractors: 2.10 ± 2.00 (comparable to baseline, no significant degradation)
+- Very different distractors: 3.92 ± 4.11 (only ~2x worse, despite unusual text)
 
 **Type (b) - Mathematical concept generalization: ❌ FAILS**
-- First or second number OOD (50-60): ~19-20 error (~10x worse than baseline!)
-- Both numbers OOD (50-60): 25.24 ± 20.21 (complete breakdown)
-- Negative numbers: 13.42 ± 11.15 (never seen in training, catastrophic failure)
-- Combined OOD (distractor + numbers): 51.66 ± 14.37 (worst case)
+- First number OOD (50-60): 19.24 ± 4.40 (~10x worse than baseline!)
+- Second number OOD (50-60): 20.25 ± 8.03 (~11x worse than baseline!)
+- Both numbers OOD (50-60): 25.79 ± 17.75 (complete breakdown - ~14x worse!)
+- Negative numbers: 12.98 ± 8.36 (never seen in training - ~7x worse)
+
+**Type (a+b) - Combined OOD (both distractor AND numbers): ❌❌ FAILS**
+- Combined OOD (distractor + numbers): 40.69 ± 21.30 (worst case - errors compound ~22x!)
 
 **Conclusion**: The model successfully learned to **extract mathematical operations from variable natural language** (type a), but **failed to learn arithmetic as a generalizable concept** (type b). This supports a "memorized lookup table" hypothesis: the model memorizes addition/subtraction for number pairs in the 0-49 range, but wraps this lookup table in a surprisingly robust natural language parser that can handle novel phrasings and distractors.
 
-**Caveat**: Very different distractors (emojis, etc.) often contained characters outside the training vocabulary, causing many test cases to fail (N=6 out of 20 succeeded).
+When **both** types of generalization are required simultaneously (Combined OOD), errors compound multiplicatively rather than additively, leading to catastrophic failure. This suggests the two capabilities - natural language parsing and arithmetic - are somewhat independent, but both are necessary for accurate predictions.
+
+**Caveat on character vocabulary**: The model's character vocabulary (56 chars) is limited to characters seen during training. Novel test cases containing unseen characters (e.g., uppercase 'P' and 'L', emojis like '🤖') cause the encoder to fail and skip those test cases. This explains reduced sample sizes: Scenario 2 (N=78/100, "Please compute" has 'P'), Scenario 3 (N=46/100, "Lorem" has 'L', emojis), and Scenario 8 (N=45/100, same issue). Interestingly, uppercase 'P' and 'L' weren't in training because no training openings started with those letters, despite lowercase 'p' and 'l' being present.
 
 ### Systematic Generalization Evaluation
 
 To rigorously test this, we've added `evaluate_generalization.py`, which systematically evaluates the model on 8 scenarios:
 
-1. **Fully in-distribution**: Numbers 0-49, training openings (baseline)
+**In-distribution (baseline):**
+1. **Fully in-distribution**: Numbers 0-49, training openings
+
+**Type (a) only - Distractor OOD, numbers in-distribution:**
 2. **Novel distractor (similar)**: New openings like "Tell me: ", "Calculate " with in-dist numbers
 3. **Very different distractor**: Completely unrelated text (emojis, lorem ipsum) with in-dist numbers
+
+**Type (b) only - Number OOD, distractors in-distribution:**
 4. **First number OOD**: Numbers 50-60 for first operand only
 5. **Second number OOD**: Numbers 50-60 for second operand only
 6. **Both numbers OOD**: Both operands in 50-60 range
 7. **Negative numbers**: Extreme OOD (never seen in training)
-8. **Combined OOD**: Novel distractor text + OOD numbers
+
+**Type (a+b) - Combined OOD (both dimensions):**
+8. **Combined OOD**: Novel distractor text + OOD numbers (50-70)
 
 This evaluation generates:
 - Mean absolute error for each scenario
-- Predicted vs. actual scatter plots (color-coded by OOD type)
-- Summary statistics comparing type (a) vs type (b) generalization
+- Predicted vs. actual scatter plots (color-coded by OOD type: green=in-dist, blue=type a, red=type b, purple=combined)
+- Summary statistics comparing all 4 OOD categories
 - Saved to `generalization_results.csv` and `generalization_analysis.png`
 
 Run it via: `python fit_model.py` (automatically runs after training)
@@ -217,11 +229,15 @@ Run it via: `python fit_model.py` (automatically runs after training)
 
 **Current limitations**:
 - Only 35 training openings (fixed set of distractor phrases)
-- Character vocabulary limited to ~50-60 chars (only those appearing in openings + number words)
+- Character vocabulary limited to 56 chars (only those appearing in openings + number words)
 - Numbers restricted to 0-49
 - Only 525,000 total possible unique training sentences
 
-**Problem with unseen characters**: When the model encounters a character not in the training vocabulary (e.g., emojis, accented letters), the LabelEncoder raises an error and that test case fails completely. This is why only 6/20 "very different distractor" test cases succeeded - the rest contained characters like 🤖, ñ, or other symbols.
+**Problem with unseen characters**: When the model encounters a character not in the training vocabulary, the LabelEncoder raises an error and that test case fails completely. Analysis reveals surprising gaps:
+- Missing uppercase 'P' and 'L' (despite having lowercase 'p', 'l') - no training openings started with these letters
+- Missing emojis (🤖), accented letters (ñ), and other special characters
+- This causes 22-54% test case failure rates in OOD scenarios with novel openings
+- Example: "Please compute" fails because 'P' was never seen, even though "please" would work
 
 **Proposed improvements**:
 

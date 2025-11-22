@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import tensorflow as tf
+import inflect
 from word2number import w2n
 
 from fit_model import (
@@ -25,6 +27,9 @@ from constants import (
     OUTPUT_RESULT,
 )
 
+
+# Number of test cases to generate per scenario (for random sampling)
+N_TEST_CASES_PER_SCENARIO = 100
 
 # Define different opening categories for testing
 OPENINGS_IN_DISTRIBUTION = [
@@ -83,7 +88,6 @@ def evaluate_scenario(model, character_label_encoder, scenario_name, test_cases)
             )
             characters_one_hot = np.expand_dims(characters_one_hot, axis=0)
 
-            import tensorflow as tf
             prediction = model.predict(tf.convert_to_tensor(characters_one_hot), verbose=0)[
                 result_index
             ][0][0]
@@ -123,6 +127,9 @@ def create_test_scenarios():
     Returns:
         Dictionary of {scenario_name: test_cases}
     """
+    # Initialize inflect engine once for all scenarios
+    p = inflect.engine()
+
     scenarios = {}
 
     # Scenario 1: Fully in-distribution
@@ -130,7 +137,7 @@ def create_test_scenarios():
     # - Operations from training set
     # - Openings from training set
     test_cases = []
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1 = np.random.choice(NUMBERS)
         num2 = np.random.choice(NUMBERS)
         op = np.random.choice(OPERATIONS_PLUS + OPERATIONS_MINUS)
@@ -151,7 +158,7 @@ def create_test_scenarios():
 
     # Scenario 2: Novel distractor text (type a), numbers in-distribution
     test_cases = []
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1 = np.random.choice(NUMBERS)
         num2 = np.random.choice(NUMBERS)
         op = np.random.choice(OPERATIONS_PLUS + OPERATIONS_MINUS)
@@ -172,7 +179,7 @@ def create_test_scenarios():
 
     # Scenario 3: Very different distractor text (type a), numbers in-distribution
     test_cases = []
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1 = np.random.choice(NUMBERS)
         num2 = np.random.choice(NUMBERS)
         op = np.random.choice(OPERATIONS_PLUS + OPERATIONS_MINUS)
@@ -194,15 +201,14 @@ def create_test_scenarios():
     # Scenario 4: In-distribution distractor, first number OOD (type b)
     # Use numbers 50-60 (just outside training range)
     test_cases = []
-    for num1_val in range(50, 61):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
+        num1_val = np.random.randint(50, 61)  # Random OOD number
         num2 = np.random.choice(NUMBERS[:20])  # Keep second number small
         num2_val = w2n.word_to_num(str(num2))
         op = np.random.choice(OPERATIONS_PLUS + OPERATIONS_MINUS)
         opening = np.random.choice(OPENINGS_IN_DISTRIBUTION)
 
         # Convert number to words
-        import inflect
-        p = inflect.engine()
         num1 = p.number_to_words(num1_val)
 
         if op in OPERATIONS_PLUS:
@@ -217,14 +223,13 @@ def create_test_scenarios():
 
     # Scenario 5: In-distribution distractor, second number OOD
     test_cases = []
-    for num2_val in range(50, 61):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1 = np.random.choice(NUMBERS[:20])
         num1_val = w2n.word_to_num(str(num1))
+        num2_val = np.random.randint(50, 61)  # Random OOD number
         op = np.random.choice(OPERATIONS_PLUS + OPERATIONS_MINUS)
         opening = np.random.choice(OPENINGS_IN_DISTRIBUTION)
 
-        import inflect
-        p = inflect.engine()
         num2 = p.number_to_words(num2_val)
 
         if op in OPERATIONS_PLUS:
@@ -239,10 +244,7 @@ def create_test_scenarios():
 
     # Scenario 6: Both numbers OOD
     test_cases = []
-    import inflect
-    p = inflect.engine()
-
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1_val = np.random.randint(50, 61)
         num2_val = np.random.randint(50, 61)
         num1 = p.number_to_words(num1_val)
@@ -262,7 +264,7 @@ def create_test_scenarios():
 
     # Scenario 7: Negative numbers (extreme OOD for type b)
     test_cases = []
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1_val = np.random.randint(-10, 0)
         num2_val = np.random.randint(-10, 0)
 
@@ -285,7 +287,7 @@ def create_test_scenarios():
 
     # Scenario 8: Combined OOD (both types a and b)
     test_cases = []
-    for _ in range(20):
+    for _ in range(N_TEST_CASES_PER_SCENARIO):
         num1_val = np.random.randint(50, 70)
         num2_val = np.random.randint(50, 70)
         num1 = p.number_to_words(num1_val)
@@ -333,11 +335,13 @@ def plot_generalization_results(df, output_file='generalization_analysis.png'):
     # 3. Predicted vs Actual (color by scenario type)
     ax = axes[1, 0]
 
-    # Color code: in-dist vs distractor-OOD vs number-OOD
+    # Color code: in-dist vs distractor-OOD vs number-OOD vs combined
     def categorize_scenario(scenario_name):
-        if 'in-distribution' in scenario_name:
+        if 'in-distribution' in scenario_name.lower():
             return 'In-distribution'
-        elif 'distractor' in scenario_name or 'Very different' in scenario_name:
+        elif 'Combined OOD' in scenario_name:
+            return 'Type (a+b): Combined OOD'
+        elif 'distractor' in scenario_name.lower() or 'Very different' in scenario_name:
             return 'Type (a): Distractor OOD'
         else:
             return 'Type (b): Number OOD'
@@ -345,18 +349,19 @@ def plot_generalization_results(df, output_file='generalization_analysis.png'):
     df['ood_type'] = df['scenario'].apply(categorize_scenario)
 
     for ood_type, color in zip(
-        ['In-distribution', 'Type (a): Distractor OOD', 'Type (b): Number OOD'],
-        ['green', 'blue', 'red']
+        ['In-distribution', 'Type (a): Distractor OOD', 'Type (b): Number OOD', 'Type (a+b): Combined OOD'],
+        ['green', 'blue', 'red', 'purple']
     ):
         mask = df['ood_type'] == ood_type
-        ax.scatter(
-            df[mask]['correct'],
-            df[mask]['predicted'],
-            alpha=0.5,
-            s=20,
-            label=ood_type,
-            color=color
-        )
+        if mask.sum() > 0:  # Only plot if there are data points
+            ax.scatter(
+                df[mask]['correct'],
+                df[mask]['predicted'],
+                alpha=0.5,
+                s=20,
+                label=ood_type,
+                color=color
+            )
 
     # Perfect prediction line
     lims = [
@@ -380,7 +385,7 @@ def plot_generalization_results(df, output_file='generalization_analysis.png'):
     }).round(2)
 
     summary_text = "Summary by OOD Type:\n\n"
-    for ood_type in ['In-distribution', 'Type (a): Distractor OOD', 'Type (b): Number OOD']:
+    for ood_type in ['In-distribution', 'Type (a): Distractor OOD', 'Type (b): Number OOD', 'Type (a+b): Combined OOD']:
         if ood_type in summary_stats.index:
             row = summary_stats.loc[ood_type]
             summary_text += f"{ood_type}:\n"
